@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数当てゲーム</title>
+  <meta name="description" content="1〜100の数当てゲーム。URLで公開可能な単一HTML。" />
+  <style>
+    :root { --bg:#0b0f19; --card:#121a2a; --text:#f2f5f7; --muted:#9aa4b2; --accent:#6aa9ff; --ok:#39d98a; --ng:#ff6a6a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: radial-gradient(1200px 800px at 20% 0%, #10182a 0%, var(--bg) 60%); color: var(--text); }
+    .wrap { min-height: 100svh; display: grid; place-items: center; padding: 24px; }
+    .card { width: min(560px, 100%); background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); }
+    h1 { margin: 0 0 8px; font-size: clamp(22px, 3.2vw, 28px); letter-spacing: .02em; }
+    .sub { color: var(--muted); margin-bottom: 16px; font-size: 14px; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+    input[type=number] { width: 100%; padding: 14px 14px; background: var(--card); color: var(--text); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; font-size: 16px; outline: none; transition: border .2s, box-shadow .2s; }
+    input[type=number]:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(106,169,255,.15); }
+    button { padding: 14px 18px; border: none; border-radius: 12px; background: var(--accent); color: #081223; font-weight: 700; font-size: 16px; cursor: pointer; transition: transform .04s ease, filter .2s; }
+    button:active { transform: translateY(1px); }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.14); }
+    .status { margin-top: 14px; min-height: 24px; font-size: 16px; }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .log { margin-top: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; color: #e6edf3; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px; max-height: 220px; overflow: auto; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+    .ok { background: rgba(57,217,138,.12); color: var(--ok); border: 1px solid rgba(57,217,138,.28); }
+    .ng { background: rgba(255,106,106,.12); color: var(--ng); border: 1px solid rgba(255,106,106,.28); }
+    .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .foot { display: flex; gap: 8px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <main class="card" role="main" aria-labelledby="title">
+      <h1 id="title">数当てゲーム</h1>
+      <p class="sub">1〜100のどれかを当てよう。ヒント（高い/低い）を返すよ。</p>
+
+      <div class="row" role="group" aria-label="入力フォーム">
+        <input id="guess" type="number" inputmode="numeric" min="1" max="100" placeholder="1〜100の整数" aria-label="予想した数値" />
+        <button id="try">判定</button>
+      </div>
+
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="hint" id="hint"></div>
+
+      <div class="meta">
+        <span id="range-pill" class="pill">範囲: 1–100</span>
+        <span id="attempts-pill" class="pill">試行: 0</span>
+      </div>
+
+      <div class="log" id="log" aria-live="polite" aria-label="履歴"></div>
+
+      <div class="foot">
+        <button class="secondary" id="restart">もう一度</button>
+        <button class="secondary" id="share">結果を共有</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const MIN = 1, MAX = 100;
+      let secret = rand(MIN, MAX);
+      let attempts = 0;
+      const $ = (s) => document.querySelector(s);
+      const elGuess = $('#guess');
+      const elTry = $('#try');
+      const elStatus = $('#status');
+      const elHint = $('#hint');
+      const elLog = $('#log');
+      const elAttempts = $('#attempts-pill');
+      const elRestart = $('#restart');
+      const elShare = $('#share');
+
+      elGuess.addEventListener('keydown', (e) => { if (e.key === 'Enter') judge(); });
+      elTry.addEventListener('click', judge);
+      elRestart.addEventListener('click', reset);
+      elShare.addEventListener('click', share);
+
+      focusInput();
+      log(`ゲーム開始。1〜100の整数を当ててね。`);
+
+      function judge(){
+        const v = parseInt(elGuess.value, 10);
+        if (Number.isNaN(v)) return speak('整数を入れてね。', 'ng');
+        if (v < MIN || v > MAX) return speak(`範囲外！ ${MIN}〜${MAX}で入力してね。`, 'ng');
+        attempts++;
+        elAttempts.textContent = `試行: ${attempts}`;
+
+        if (v === secret){
+          speak(`正解！ ${attempts}回で当てたよ。`, 'ok');
+          elHint.textContent = 'もう一度遊ぶには「もう一度」を押してね。';
+          log(`✅ 正解: ${v}（${attempts}手）`);
+          elGuess.disabled = true; elTry.disabled = true;
+        } else if (v < secret){
+          speak('小さすぎる！', 'ng');
+          hint(`${v} よりも大きいよ。`);
+          log(`❌ ${v} → 小さい`);
+        } else {
+          speak('大きすぎる！', 'ng');
+          hint(`${v} よりも小さいよ。`);
+          log(`❌ ${v} → 大きい`);
+        }
+        elGuess.value = '';
+        focusInput();
+      }
+
+      function reset(){
+        secret = rand(MIN, MAX);
+        attempts = 0;
+        elAttempts.textContent = '試行: 0';
+        elStatus.textContent = '';
+        elHint.textContent = '';
+        elLog.textContent = '';
+        elGuess.disabled = false; elTry.disabled = false;
+        log('リセットしました。新しい数を当ててね。');
+        focusInput();
+      }
+
+      async function share(){
+        const text = `数当てゲームの結果: ${elStatus.textContent || 'プレイ中'} / 試行 ${attempts}回`;
+        try{
+          if (navigator.share){
+            await navigator.share({ text, url: location.href, title: document.title });
+          } else if (navigator.clipboard){
+            await navigator.clipboard.writeText(`${text}\n${location.href}`);
+            speak('結果とURLをクリップボードにコピーしました。', 'ok');
+          } else {
+            alert(`${text}\n${location.href}`);
+          }
+        } catch(e){ /* ユーザーキャンセル等は無視 */ }
+      }
+
+      function speak(text, type){
+        elStatus.textContent = text;
+        elStatus.className = 'status';
+        if (type === 'ok') elStatus.classList.add('ok', 'pill');
+        if (type === 'ng') elStatus.classList.add('ng', 'pill');
+      }
+      function hint(text){ elHint.textContent = text; }
+      function log(text){ elLog.textContent += (elLog.textContent ? '\n' : '') + text; elLog.scrollTop = elLog.scrollHeight; }
+      function focusInput(){ elGuess.focus(); setTimeout(() => elGuess.select(), 0); }
+      function rand(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
+    })();
+  </script>
+</body>
+</html>
