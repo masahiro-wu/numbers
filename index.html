@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>もぐら叩き - シンプル版</title>
-  <meta name="description" content="URL公開できる1ファイル完結のもぐら叩き。初心者向け・コメント付き。" />
+  <title>もぐら叩き - コンボ&リザルト版</title>
   <style>
     :root{
       --bg:#0b0f19; --panel:#111a2b; --border:rgba(255,255,255,.12);
       --text:#f0f6fc; --muted:#9aa4b2; --accent:#6aa9ff; --ok:#39d98a; --ng:#ff6a6a;
-      --hole:#0f1422; --mole:#f3c97a;
+      --hole:#0f1422; --mole:#f3c97a; --bunny:#e9f3ff; --fox:#f7b27a; --overlay:rgba(8,12,20,.6);
     }
     *{ box-sizing:border-box }
     html,body{ height:100%; }
@@ -31,23 +30,37 @@
     }
     .hole:active{ transform:translateY(1px); }
 
-    /* もぐら */
-    .mole{ position:absolute; left:50%; bottom:-30%; transform:translateX(-50%);
-      width:64%; max-width:160px; aspect-ratio:1/1.1; border-radius:14px 14px 10px 10px; background:radial-gradient(120% 100% at 50% 0%, #ffe3a4 0%, var(--mole) 55%);
+    /* エンティティ（もぐら/デコイ） */
+    .entity{ position:absolute; left:50%; bottom:-30%; transform:translateX(-50%);
+      width:64%; max-width:160px; aspect-ratio:1/1.1; border-radius:14px 14px 10px 10px;
       border:1px solid rgba(0,0,0,.2); box-shadow: 0 12px 24px rgba(0,0,0,.45);
     }
-    .mole::before{ content:""; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 8px 16px rgba(0,0,0,.25), inset 0 -4px 10px rgba(255,255,255,.25);
-    }
-    .mole .eye{ position:absolute; top:34%; width:12%; aspect-ratio:1; background:#1d2333; border-radius:50%; box-shadow: inset 0 -1px 0 rgba(255,255,255,.08); }
-    .mole .eye.left{ left:30%; }
-    .mole .eye.right{ right:30%; }
-    .mole .nose{ position:absolute; top:54%; left:50%; transform:translateX(-50%); width:22%; aspect-ratio:1.2/1; background:#ff9aa8; border-radius:999px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+    .entity::before{ content:""; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 8px 16px rgba(0,0,0,.25), inset 0 -4px 10px rgba(255,255,255,.25); }
+
+    /* 顔パーツ */
+    .eyes{ position:absolute; top:32%; left:50%; transform:translateX(-50%); display:flex; gap:18%; width:60%; justify-content:center; }
+    .eye{ width:12%; aspect-ratio:1; background:#1d2333; border-radius:50%; box-shadow: inset 0 -1px 0 rgba(255,255,255,.08); }
+    .nose{ position:absolute; top:54%; left:50%; transform:translateX(-50%); width:22%; aspect-ratio:1.2/1; background:#ff9aa8; border-radius:999px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+
+    /* 種別スキン */
+    .mole{ background:radial-gradient(120% 100% at 50% 0%, #ffe3a4 0%, var(--mole) 55%); }
+    .bunny{ background:radial-gradient(120% 100% at 50% 0%, #ffffff 0%, var(--bunny) 65%); }
+    .bunny .ear{ position:absolute; width:16%; aspect-ratio:1/2; background:var(--bunny); border:1px solid rgba(0,0,0,.15); border-bottom:none; border-radius:999px 999px 0 0; top:-22%; }
+    .bunny .ear.left{ left:26%; }
+    .bunny .ear.right{ right:26%; }
+    .fox{ background:radial-gradient(120% 100% at 50% 0%, #ffd2a4 0%, var(--fox) 60%); }
 
     /* 出現アニメーション */
     .up{ animation: pop .25s ease-out forwards; }
     .down{ animation: hide .22s ease-in forwards; }
     @keyframes pop{ from{ bottom:-40%; } to{ bottom:8%; } }
     @keyframes hide{ from{ bottom:8%; } to{ bottom:-40%; } }
+
+    /* ヒット演出：目がバツ（＞＜）に、軽くシェイク */
+    .hit .eyes{ display:none; }
+    .hit::after{ content:"＞＜"; position:absolute; top:34%; left:50%; transform:translateX(-50%); font-weight:800; font-size: clamp(16px, 6vw, 28px); color:#1d2333; text-shadow:0 1px 0 rgba(255,255,255,.2); }
+    .hit{ animation: shake .15s linear 2; }
+    @keyframes shake { 0%{ transform:translateX(-50%) translateY(0); } 25%{ transform:translateX(-48%) translateY(-1px); } 50%{ transform:translateX(-50%) translateY(0); } 75%{ transform:translateX(-52%) translateY(1px);} 100%{ transform:translateX(-50%) translateY(0);} }
 
     .hud{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; color:var(--muted); font-size:13px; }
     .pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,.04); }
@@ -60,139 +73,173 @@
 
     .log{ margin-top:14px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:12px; color:#e6edf3; background: rgba(255,255,255,.04); border:1px solid var(--border); border-radius:12px; max-height:160px; overflow:auto; }
     .sr-only{ position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+    /* ====== リザルトモーダル ====== */
+    .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:var(--overlay); backdrop-filter:saturate(1.2) blur(2px); z-index:50; }
+    .modal.show{ display:flex; }
+    .dialog{ width:min(520px, 92%); background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05); text-align:center; }
+    .dialog h2{ margin:6px 0 8px; }
+    .dialog .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; text-align:left; }
+    .dialog .kpi{ padding:10px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.04); }
+    .dialog .btns{ margin-top:12px; display:flex; gap:8px; justify-content:center; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <main class="card" role="main">
+    <main class="card">
       <header>
         <div>
-          <h1>もぐら叩き <span class="sub">（3×3・初心者向け）</span></h1>
-          <p class="sub">30秒で高得点を目指そう。クリック / タップで「もぐら」を叩く！</p>
+          <h1>もぐら叩き <span class="sub">コンボ＆リザルト</span></h1>
         </div>
         <div class="panel">
-          <div class="pill">スコア: <b id="score">0</b></div>
-          <div class="pill">残り: <b id="time">30</b>s</div>
-          <div class="pill">命中: <b id="hit">0</b></div>
-          <div class="pill">ミス: <b id="miss">0</b></div>
-          <div class="pill">精度: <b id="acc">0%</b></div>
+          <div class="pill">スコア:<b id="score">0</b></div>
+          <div class="pill">残り:<b id="time">30</b>s</div>
+          <div class="pill">命中:<b id="hit">0</b></div>
+          <div class="pill">ミス:<b id="miss">0</b></div>
+          <div class="pill">精度:<b id="acc">0%</b></div>
+          <div class="pill">コンボ:<b id="combo">0</b></div>
+          <div class="pill">最高コンボ:<b id="maxCombo">0</b></div>
         </div>
       </header>
-
-      <!-- 9つの穴（ボタンとして扱う。A11yのため tabindex を設定） -->
-      <section class="grid" id="grid" aria-label="もぐらの穴">
-        <!-- JSで動的に生成 -->
-      </section>
-
-      <div class="controls">
-        <button id="start" class="primary">スタート</button>
-        <button id="stop" disabled>ストップ</button>
-        <select id="difficulty" aria-label="難易度">
-          <option value="easy">かんたん</option>
-          <option value="normal" selected>ふつう</option>
-          <option value="hard">むずかしい</option>
-        </select>
-        <button id="share">結果を共有</button>
-      </div>
 
       <div class="hud" aria-live="polite">
         <div class="pill">状態: <b id="state">停止中</b></div>
         <div class="pill">出現間隔: <b id="rate">---</b></div>
         <div class="pill">表示時間: <b id="show">---</b></div>
+        <div class="pill">コンボ: <b id="combo">0</b></div>
+        <div class="pill">最大コンボ: <b id="maxCombo">0</b></div>
       </div>
-
-      <div class="log" id="log" aria-live="polite" aria-label="ログ"></div>
-      <div class="sr-only" id="sr"></div>
+      <section class="grid" id="grid"></section>
+      <div class="controls">
+        <button id="start" class="primary">スタート</button>
+        <button id="stop" disabled>ストップ</button>
+        <select id="difficulty">
+          <option value="easy">かんたん</option>
+          <option value="normal" selected>ふつう</option>
+          <option value="hard">むずかしい</option>
+        </select>
+      </div>
+      <div class="log" id="log"></div>
+    
+      <!-- リザルトモーダルはJSで追加 -->
     </main>
   </div>
+  <div class="modal" id="resultModal">
+    <div class="modal-content" id="resultContent"></div>
+  </div>
+<script>
+    // ==== 設定 ====
+    const GRID_SIZE = 3;            // 3x3
+    const GAME_SECONDS = 30;        // プレイ時間
 
-  <script>
-    // ==== 設定（初心者向けに分かりやすいパラメータ）====
-    const GRID_SIZE = 3;          // 3x3 の穴
-    const GAME_SECONDS = 30;      // ゲーム時間
-
-    // 難易度ごとの出現レート（ms）と表示時間（ms）
+    // 難易度（出現間隔msの範囲, 表示時間ms）
     const PRESETS = {
-      easy:   { spawn: [900, 1200], show: 900 },   // ゆっくり
-      normal: { spawn: [600, 900],  show: 700 },   // 標準
-      hard:   { spawn: [420, 700],  show: 520 },   // 速い
+      easy:   { spawn: [900, 1200], show: 900 },
+      normal: { spawn: [600, 900],  show: 700 },
+      hard:   { spawn: [420, 700],  show: 520 },
     };
 
-    // ==== 変数（ゲームの状態）====
-    let score = 0, hit = 0, miss = 0, acc = 0;
+    // 出現するエンティティの確率
+    const ENTITY_WEIGHTS = { mole: 0.7, bunny: 0.2, fox: 0.1 };
+
+    // コンボ（命中連続数）
+    const COMBO_MIN = 2;                 // 2連続以上でボーナス表示
+    const COMBO_BONUS_STEP = 2;          // 連続ごとの加点（上限付き）
+    const COMBO_BONUS_CAP = 20;          // コンボ加点の上限
+
+    // ==== 変数 ====
+    let score = 0, hit = 0, miss = 0;
     let timeLeft = GAME_SECONDS;
     let running = false;
-    let spawnTimer = null;    // 次の出現までのタイマー
-    let hideTimers = new Map(); // 各穴ごとの隠れるタイマー
-    let countdownTimer = null; // 残り時間のタイマー
-    let lastIndex = -1;        // 同じ穴連発を避ける
+    let spawnTimer = null;
+    let hideTimers = new Map();
+    let countdownTimer = null;
+    let lastIndex = -1;
+    let combo = 0, maxCombo = 0;
 
-    // DOM 取得
     const $ = (s)=>document.querySelector(s);
     const grid = $('#grid');
     const elScore=$('#score'), elTime=$('#time'), elHit=$('#hit'), elMiss=$('#miss'), elAcc=$('#acc');
     const elStart=$('#start'), elStop=$('#stop'), elShare=$('#share');
     const elDifficulty=$('#difficulty');
     const elState=$('#state'), elRate=$('#rate'), elShow=$('#show');
+    const elCombo=$('#combo'), elMaxCombo=$('#maxCombo');
     const elLog=$('#log'), elSr=$('#sr');
 
-    // 穴のDOMを生成
+    // Result modal elements
+    const modal = document.createElement('div');
+    modal.className='modal';
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+        <h2 id="resultTitle">リザルト</h2>
+        <div class="grid2">
+          <div class="kpi"><strong>スコア</strong><div id="rScore">0</div></div>
+          <div class="kpi"><strong>精度</strong><div id="rAcc">0%</div></div>
+          <div class="kpi"><strong>命中</strong><div id="rHit">0</div></div>
+          <div class="kpi"><strong>ミス</strong><div id="rMiss">0</div></div>
+          <div class="kpi"><strong>最大コンボ</strong><div id="rMaxCombo">0</div></div>
+          <div class="kpi"><strong>難易度</strong><div id="rDiff">normal</div></div>
+        </div>
+        <div class="btns">
+          <button id="again" class="primary">もう一度</button>
+          <button id="close">閉じる</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const rScore = modal.querySelector('#rScore');
+    const rAcc   = modal.querySelector('#rAcc');
+    const rHit   = modal.querySelector('#rHit');
+    const rMiss  = modal.querySelector('#rMiss');
+    const rMaxC  = modal.querySelector('#rMaxCombo');
+    const rDiff  = modal.querySelector('#rDiff');
+    modal.querySelector('#close').addEventListener('click', ()=> modal.classList.remove('show'));
+    modal.querySelector('#again').addEventListener('click', ()=>{ modal.classList.remove('show'); start(); });
+
+    // 穴を生成
     const holes=[];
     for(let i=0;i<GRID_SIZE*GRID_SIZE;i++){
       const hole=document.createElement('button');
-      hole.type='button';
-      hole.className='hole';
-      hole.setAttribute('aria-label',`穴 ${i+1}`);
-      hole.dataset.index=i;
+      hole.type='button'; hole.className='hole'; hole.dataset.index=i;
 
-      // もぐら要素（非表示から開始）
-      const mole=document.createElement('div');
-      mole.className='mole';
-      mole.hidden=true;
-      mole.innerHTML='<span class="eye left"></span><span class="eye right"></span><span class="nose"></span>';
-      hole.appendChild(mole);
+      const entity=document.createElement('div');
+      entity.className='entity mole'; // 初期はもぐら
+      entity.hidden=true;
+      entity.innerHTML=`<div class="eyes"><span class="eye"></span><span class="eye"></span></div><span class="nose"></span>`;
+      hole.appendChild(entity);
 
       hole.addEventListener('click',()=>onHoleClick(i));
-      holes.push({hole,mole,up:false});
+      holes.push({hole, entity, up:false, kind:'mole'});
       grid.appendChild(hole);
     }
 
-    // コントロールのリスナー
+    // リスナー
     elStart.addEventListener('click', start);
     elStop.addEventListener('click', stop);
     elShare.addEventListener('click', share);
     elDifficulty.addEventListener('change', updateHud);
-
-    // 初期HUD
     updateHud();
 
-    // ==== ゲームの基本処理 ====
+    // ==== ゲーム処理 ====
     function start(){
       if(running) return;
-      running=true; score=hit=miss=0; timeLeft=GAME_SECONDS; lastIndex=-1;
+      running=true; score=hit=miss=0; timeLeft=GAME_SECONDS; lastIndex=-1; combo=0; maxCombo=0;
       elStart.disabled=true; elStop.disabled=false; elDifficulty.disabled=true;
       clearAllTimers();
-      for(const h of holes) hide(h); // 念のため全穴を隠す
-      tickCountdown();
-      spawnLoop();
-      speak('開始！');
-      log('ゲーム開始。高得点を狙え！');
-      render();
+      for(const h of holes) hide(h);
+      tickCountdown(); spawnLoop();
+      speak('開始！'); log('ゲーム開始'); render();
     }
 
     function stop(){
-      if(!running) return;
-      running=false; elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false;
-      clearAllTimers();
-      for(const h of holes) hide(h);
-      speak('停止');
-      log(`終了：スコア ${score} / 命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}%`);
-      render();
+      if(!running) return; running=false;
+      elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false;
+      clearAllTimers(); for(const h of holes) hide(h);
+      speak('停止'); log(summary()); render();
     }
 
     function tickCountdown(){
-      elTime.textContent=timeLeft;
-      elState.textContent='プレイ中';
+      elTime.textContent=timeLeft; elState.textContent='プレイ中';
       countdownTimer=setInterval(()=>{
         timeLeft--; elTime.textContent=timeLeft;
         if(timeLeft<=0){ clearInterval(countdownTimer); countdownTimer=null; endGame(); }
@@ -201,13 +248,14 @@
 
     function endGame(){
       running=false; elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false;
-      clearTimeout(spawnTimer); spawnTimer=null;
-      for(const h of holes) hide(h);
-      const message=`ゲーム終了！ スコア ${score}（命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}%）`;
-      speak(message); log(message);
-      beep(440,0.08); setTimeout(()=>beep(329.6,0.16),90); // 終了ジングル
-      render();
+      clearTimeout(spawnTimer); spawnTimer=null; for(const h of holes) hide(h);
+      const m=summary(); speak(m); log(m); finishJingle(); render();
+      // リザルト表示
+      rScore.textContent=score; rAcc.textContent=calcAcc()+"%"; rHit.textContent=hit; rMiss.textContent=miss; rMaxC.textContent=maxCombo; rDiff.textContent=elDifficulty.value;
+      modal.classList.add('show');
     }
+
+    function summary(){ return `ゲーム終了！ スコア ${score}（命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}% / 最大コンボ ${maxCombo}）`; }
 
     function spawnLoop(){
       if(!running) return;
@@ -215,108 +263,84 @@
       const delay = randInt(spawn[0], spawn[1]);
       spawnTimer=setTimeout(()=>{
         const idx = pickIndex();
-        showMole(idx, show);
-        spawnLoop(); // 次の出現を予約
+        const kind = pickEntityKind();
+        showEntity(idx, show, kind);
+        spawnLoop();
       }, delay);
       updateHud();
     }
 
-    function showMole(index, duration){
-      const h = holes[index];
-      if(!h || h.up) return; // 既に出ていればスキップ
-      h.up = true; h.mole.hidden=false; h.mole.classList.remove('down'); h.mole.classList.add('up');
-      // 一定時間で自動的に隠す
+    function showEntity(index, duration, kind){
+      const h = holes[index]; if(!h || h.up) return;
+      h.up = true; h.kind = kind;
+      const el = h.entity;
+      el.classList.remove('mole','bunny','fox','hit');
+      el.classList.add(kind);
+      el.querySelectorAll('.ear').forEach(e=>e.remove());
+      if(kind==='bunny'){
+        const left=document.createElement('span'); left.className='ear left';
+        const right=document.createElement('span'); right.className='ear right';
+        el.append(left,right);
+      }
+      el.hidden=false; el.classList.remove('down'); el.classList.add('up');
       const t=setTimeout(()=>hide(h), duration);
       hideTimers.set(index,t);
     }
 
     function hide(h){
-      if(!h.up) return;
-      h.up=false; h.mole.classList.remove('up'); h.mole.classList.add('down');
-      setTimeout(()=>{ h.mole.hidden=true; }, 180);
+      if(!h.up) return; h.up=false;
+      h.entity.classList.remove('up'); h.entity.classList.add('down');
+      setTimeout(()=>{ h.entity.hidden=true; h.entity.classList.remove('hit'); }, 180);
     }
 
     function onHoleClick(index){
-      if(!running){ miss++; render(); return; }
+      if(!running){ miss++; resetCombo(); render(); return; }
       const h = holes[index];
       if(h.up){
-        // 命中
-        score+=10; hit++; hide(h); cancelHide(index);
-        beep(740,0.04); // 命中音
-        log(`✅ 命中！（+10）`);
+        if(h.kind==='mole'){
+          combo++; maxCombo = Math.max(maxCombo, combo);
+          const bonus = Math.min(COMBO_BONUS_CAP, Math.max(0, (combo-1)*COMBO_BONUS_STEP));
+          score += 10 + bonus; hit++; cancelHide(index);
+          h.entity.classList.add('hit');
+          beep(720 + Math.min(280, combo*10), 0.05);
+          log(`✅ もぐら命中！（+10${bonus?` +${bonus}`:''}） combo x${combo}`);
+          setTimeout(()=>hide(h), 160);
+        } else {
+          // デコイ
+          score = Math.max(0, score-5); miss++; cancelHide(index);
+          beep(180,0.06); log('⚠️ デコイにヒット！（-5）');
+          resetCombo();
+          setTimeout(()=>hide(h), 120);
+        }
       } else {
-        // ミス
-        miss++; beep(220,0.04); log('❌ ミス');
+        miss++; beep(220,0.04); log('❌ ミス'); resetCombo();
       }
       render();
     }
 
-    function cancelHide(index){
-      const t=hideTimers.get(index);
-      if(t){ clearTimeout(t); hideTimers.delete(index); }
-    }
+    function resetCombo(){ combo=0; }
+    function cancelHide(index){ const t=hideTimers.get(index); if(t){ clearTimeout(t); hideTimers.delete(index); } }
 
-    function currentPreset(){
-      return PRESETS[elDifficulty.value] || PRESETS.normal;
-    }
+    function currentPreset(){ return PRESETS[elDifficulty.value] || PRESETS.normal; }
+    function pickIndex(){ let idx = randInt(0, holes.length-1); if(holes.length>1 && idx===lastIndex){ idx = (idx + 1 + randInt(0, holes.length-2)) % holes.length; } lastIndex = idx; return idx; }
+    function pickEntityKind(){ const r=Math.random(); if(r < ENTITY_WEIGHTS.mole) return 'mole'; if(r < ENTITY_WEIGHTS.mole + ENTITY_WEIGHTS.bunny) return 'bunny'; return 'fox'; }
 
-    function pickIndex(){
-      // 直前と違う穴を優先（同じになるのを減らす）
-      let idx = randInt(0, holes.length-1);
-      if(holes.length>1 && idx===lastIndex){ idx = (idx + 1 + randInt(0, holes.length-2)) % holes.length; }
-      lastIndex = idx; return idx;
-    }
+    function render(){ elScore.textContent=score; elHit.textContent=hit; elMiss.textContent=miss; elAcc.textContent=calcAcc()+"%"; elCombo.textContent=combo; elMaxCombo.textContent=maxCombo; }
+    function calcAcc(){ const t=hit+miss; return t? Math.round(hit/t*100):0; }
+    function updateHud(){ const {spawn,show}=currentPreset(); elRate.textContent=`${spawn[0]}-${spawn[1]}ms`; elShow.textContent=`${show}ms`; elState.textContent=running? 'プレイ中':'停止中'; }
+    function clearAllTimers(){ if(spawnTimer){ clearTimeout(spawnTimer); spawnTimer=null; } if(countdownTimer){ clearInterval(countdownTimer); countdownTimer=null; } hideTimers.forEach(t=>clearTimeout(t)); hideTimers.clear(); }
 
-    function render(){
-      elScore.textContent=score; elHit.textContent=hit; elMiss.textContent=miss; elAcc.textContent=calcAcc()+"%";
-    }
-
-    function calcAcc(){
-      const total = hit + miss; return total? Math.round(hit/total*100): 0;
-    }
-
-    function updateHud(){
-      const {spawn,show}=currentPreset();
-      elRate.textContent = `${spawn[0]}-${spawn[1]}ms`;
-      elShow.textContent = `${show}ms`;
-      elState.textContent = running? 'プレイ中':'停止中';
-    }
-
-    function clearAllTimers(){
-      if(spawnTimer){ clearTimeout(spawnTimer); spawnTimer=null; }
-      if(countdownTimer){ clearInterval(countdownTimer); countdownTimer=null; }
-      hideTimers.forEach(t=>clearTimeout(t)); hideTimers.clear();
-    }
-
-    function share(){
-      const text=`もぐら叩き：スコア ${score} / 命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}%`;
-      try{
-        if(navigator.share){ navigator.share({ title:document.title, text, url:location.href }); }
-        else if(navigator.clipboard){ navigator.clipboard.writeText(`${text}\n${location.href}`); speak('結果とURLをコピーしました'); }
-        else { alert(`${text}\n${location.href}`); }
-      }catch(e){ /* キャンセル等は無視 */ }
-    }
-
-    function log(msg){ elLog.textContent += (elLog.textContent?'\n':'') + msg; elLog.scrollTop = elLog.scrollHeight; }
+    function share(){ const text=`もぐら叩き：スコア ${score} / 命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}% / 最大コンボ ${maxCombo}`; try{ if(navigator.share){ navigator.share({ title:document.title, text, url:location.href }); } else if(navigator.clipboard){ navigator.clipboard.writeText(`${text}
+${location.href}`); speak('結果とURLをコピーしました'); } else { alert(`${text}
+${location.href}`); } }catch(e){} }
+    function log(msg){ elLog.textContent += (elLog.textContent?'
+':'') + msg; elLog.scrollTop = elLog.scrollHeight; }
     function speak(msg){ elSr.textContent = msg; }
     function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
-    // 簡易ビープ音（Web Audio API）
-    let audioCtx=null;
-    function beep(freq=440, dur=0.07){
-      try{
-        if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-        const t=audioCtx.currentTime;
-        const o=audioCtx.createOscillator();
-        const g=audioCtx.createGain();
-        o.type='square'; o.frequency.setValueAtTime(freq,t);
-        g.gain.setValueAtTime(0.001,t);
-        g.gain.exponentialRampToValueAtTime(0.12,t+0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
-        o.connect(g).connect(audioCtx.destination);
-        o.start(t); o.stop(t+dur+0.02);
-      }catch(e){ /* モバイルの自動再生制限などは無視 */ }
-    }
+    // サウンド
+    let audioCtx=null; function beep(freq=440, dur=0.07){ try{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); const t=audioCtx.currentTime; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='square'; o.frequency.setValueAtTime(freq,t); g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(0.12,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+0.02);}catch(e){} }
+    function finishJingle(){ beep(440,0.08); setTimeout(()=>beep(329.6,0.16),90); }
   </script>
 </body>
 </html>
