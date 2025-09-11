@@ -333,8 +333,7 @@
     function share(){ const text=`もぐら叩き：スコア ${score} / 命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}% / 最大コンボ ${maxCombo}`; try{ if(navigator.share){ navigator.share({ title:document.title, text, url:location.href }); } else if(navigator.clipboard){ navigator.clipboard.writeText(`${text}
 ${location.href}`); speak('結果とURLをコピーしました'); } else { alert(`${text}
 ${location.href}`); } }catch(e){} }
-    function log(msg){ elLog.textContent += (elLog.textContent?'
-':'') + msg; elLog.scrollTop = elLog.scrollHeight; }
+    function log(msg){ elLog.textContent += (elLog.textContent?'':'') + msg; elLog.scrollTop = elLog.scrollHeight; }
     function speak(msg){ elSr.textContent = msg; }
     function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
