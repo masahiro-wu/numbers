@@ -62,6 +62,12 @@
     .hit{ animation: shake .15s linear 2; }
     @keyframes shake { 0%{ transform:translateX(-50%) translateY(0); } 25%{ transform:translateX(-48%) translateY(-1px); } 50%{ transform:translateX(-50%) translateY(0); } 75%{ transform:translateX(-52%) translateY(1px);} 100%{ transform:translateX(-50%) translateY(0);} }
 
+    /* デコイ怒り演出 */
+    .angry .eyes{ display:none; }
+    .angry::after{ content:"#"; position:absolute; top:30%; right:22%; font-weight:900; color:var(--ng); }
+    .angry{ animation: rage .22s ease-in-out 3; box-shadow:0 0 0 2px rgba(255,106,106,.25), 0 12px 24px rgba(0,0,0,.45); }
+    @keyframes rage { 0%{ transform:translateX(-50%) scale(1); } 50%{ transform:translateX(-50%) scale(1.05); } 100%{ transform:translateX(-50%) scale(1); } }
+
     .hud{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; color:var(--muted); font-size:13px; }
     .pill{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,.04); }
     .pill b{ color:var(--text) }
@@ -122,54 +128,12 @@
       <div class="log" id="log"></div>
     
       <!-- リザルトモーダルはJSで追加 -->
+    
+      <!-- HUDやログはこの中 -->
     </main>
-  </div>
-  <div class="modal" id="resultModal">
-    <div class="modal-content" id="resultContent"></div>
-  </div>
-<script>
-    // ==== 設定 ====
-    const GRID_SIZE = 3;            // 3x3
-    const GAME_SECONDS = 30;        // プレイ時間
 
-    // 難易度（出現間隔msの範囲, 表示時間ms）
-    const PRESETS = {
-      easy:   { spawn: [900, 1200], show: 900 },
-      normal: { spawn: [600, 900],  show: 700 },
-      hard:   { spawn: [420, 700],  show: 520 },
-    };
-
-    // 出現するエンティティの確率
-    const ENTITY_WEIGHTS = { mole: 0.7, bunny: 0.2, fox: 0.1 };
-
-    // コンボ（命中連続数）
-    const COMBO_MIN = 2;                 // 2連続以上でボーナス表示
-    const COMBO_BONUS_STEP = 2;          // 連続ごとの加点（上限付き）
-    const COMBO_BONUS_CAP = 20;          // コンボ加点の上限
-
-    // ==== 変数 ====
-    let score = 0, hit = 0, miss = 0;
-    let timeLeft = GAME_SECONDS;
-    let running = false;
-    let spawnTimer = null;
-    let hideTimers = new Map();
-    let countdownTimer = null;
-    let lastIndex = -1;
-    let combo = 0, maxCombo = 0;
-
-    const $ = (s)=>document.querySelector(s);
-    const grid = $('#grid');
-    const elScore=$('#score'), elTime=$('#time'), elHit=$('#hit'), elMiss=$('#miss'), elAcc=$('#acc');
-    const elStart=$('#start'), elStop=$('#stop'), elShare=$('#share');
-    const elDifficulty=$('#difficulty');
-    const elState=$('#state'), elRate=$('#rate'), elShow=$('#show');
-    const elCombo=$('#combo'), elMaxCombo=$('#maxCombo');
-    const elLog=$('#log'), elSr=$('#sr');
-
-    // Result modal elements
-    const modal = document.createElement('div');
-    modal.className='modal';
-    modal.innerHTML = `
+    <!-- ====== リザルトモーダル（静的に配置：確実に表示されるように） ====== -->
+    <div id="resultModal" class="modal" aria-hidden="true">
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
         <h2 id="resultTitle">リザルト</h2>
         <div class="grid2">
@@ -184,150 +148,100 @@
           <button id="again" class="primary">もう一度</button>
           <button id="close">閉じる</button>
         </div>
-      </div>`;
-    document.body.appendChild(modal);
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="resultModal">
+    <div class="modal-content" id="resultContent"></div>
+  </div>
+<script>
+    // ==== 設定 ====
+    const GRID_SIZE = 3;            // 3x3
+    const GAME_SECONDS = 30;        // プレイ時間
 
-    const rScore = modal.querySelector('#rScore');
-    const rAcc   = modal.querySelector('#rAcc');
-    const rHit   = modal.querySelector('#rHit');
-    const rMiss  = modal.querySelector('#rMiss');
-    const rMaxC  = modal.querySelector('#rMaxCombo');
-    const rDiff  = modal.querySelector('#rDiff');
+    // 難易度（出現間隔msの範囲, 表示時間ms）
+    const PRESETS = { easy:{spawn:[900,1200],show:900}, normal:{spawn:[600,900],show:700}, hard:{spawn:[420,700],show:520} };
+
+    // 出現比率
+    const ENTITY_WEIGHTS = { mole: 0.7, bunny: 0.2, fox: 0.1 };
+
+    // コンボ（命中連続数）
+    const COMBO_MIN = 2;                 // 2連続以上でボーナス
+    const COMBO_BONUS_STEP = 2;          // 連続ごとの加点
+    const COMBO_BONUS_CAP = 20;          // 上限
+
+    // デコイの減点（要望どおり）
+    const PENALTY = { bunny: 10, fox: 30 };
+
+    // ==== 変数 ====
+    let score=0, hit=0, miss=0; let timeLeft=GAME_SECONDS; let running=false;
+    let spawnTimer=null, countdownTimer=null; const hideTimers=new Map(); let lastIndex=-1; let combo=0, maxCombo=0;
+
+    const $=(s)=>document.querySelector(s);
+    const grid=$('#grid');
+    const elScore=$('#score'), elTime=$('#time'), elHit=$('#hit'), elMiss=$('#miss'), elAcc=$('#acc');
+    const elStart=$('#start'), elStop=$('#stop'), elShare=$('#share');
+    const elDifficulty=$('#difficulty');
+    const elState=$('#state'), elRate=$('#rate'), elShow=$('#show');
+    const elCombo=$('#combo'), elMaxCombo=$('#maxCombo');
+    const elLog=$('#log'), elSr=$('#sr');
+
+    // Result modal (静的要素)
+    const modal=$('#resultModal');
+    const rScore=$('#rScore'), rAcc=$('#rAcc'), rHit=$('#rHit'), rMiss=$('#rMiss'), rMaxC=$('#rMaxCombo'), rDiff=$('#rDiff');
     modal.querySelector('#close').addEventListener('click', ()=> modal.classList.remove('show'));
     modal.querySelector('#again').addEventListener('click', ()=>{ modal.classList.remove('show'); start(); });
 
-    // 穴を生成
+    // 穴生成
     const holes=[];
     for(let i=0;i<GRID_SIZE*GRID_SIZE;i++){
-      const hole=document.createElement('button');
-      hole.type='button'; hole.className='hole'; hole.dataset.index=i;
-
-      const entity=document.createElement('div');
-      entity.className='entity mole'; // 初期はもぐら
-      entity.hidden=true;
+      const hole=document.createElement('button'); hole.type='button'; hole.className='hole'; hole.dataset.index=i;
+      const entity=document.createElement('div'); entity.className='entity mole'; entity.hidden=true;
       entity.innerHTML=`<div class="eyes"><span class="eye"></span><span class="eye"></span></div><span class="nose"></span>`;
       hole.appendChild(entity);
-
       hole.addEventListener('click',()=>onHoleClick(i));
-      holes.push({hole, entity, up:false, kind:'mole'});
-      grid.appendChild(hole);
+      holes.push({hole,entity,up:false,kind:'mole'}); grid.appendChild(hole);
     }
 
-    // リスナー
-    elStart.addEventListener('click', start);
-    elStop.addEventListener('click', stop);
-    elShare.addEventListener('click', share);
-    elDifficulty.addEventListener('change', updateHud);
+    // イベント
+    elStart.addEventListener('click', start); elStop.addEventListener('click', stop); elShare.addEventListener('click', share); elDifficulty.addEventListener('change', updateHud);
     updateHud();
 
-    // ==== ゲーム処理 ====
-    function start(){
-      if(running) return;
-      running=true; score=hit=miss=0; timeLeft=GAME_SECONDS; lastIndex=-1; combo=0; maxCombo=0;
-      elStart.disabled=true; elStop.disabled=false; elDifficulty.disabled=true;
-      clearAllTimers();
-      for(const h of holes) hide(h);
-      tickCountdown(); spawnLoop();
-      speak('開始！'); log('ゲーム開始'); render();
-    }
+    // ==== ロジック ====
+    function start(){ if(running) return; running=true; score=hit=miss=0; timeLeft=GAME_SECONDS; lastIndex=-1; combo=0; maxCombo=0; modal.classList.remove('show');
+      elStart.disabled=true; elStop.disabled=false; elDifficulty.disabled=true; clearAllTimers(); holes.forEach(h=>hide(h)); tickCountdown(); spawnLoop(); speak('開始！'); log('ゲーム開始'); render(); }
 
-    function stop(){
-      if(!running) return; running=false;
-      elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false;
-      clearAllTimers(); for(const h of holes) hide(h);
-      speak('停止'); log(summary()); render();
-    }
+    function stop(){ if(!running) return; running=false; elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false; clearAllTimers(); holes.forEach(h=>hide(h)); speak('停止'); log(summary()); render(); }
 
-    function tickCountdown(){
-      elTime.textContent=timeLeft; elState.textContent='プレイ中';
-      countdownTimer=setInterval(()=>{
-        timeLeft--; elTime.textContent=timeLeft;
-        if(timeLeft<=0){ clearInterval(countdownTimer); countdownTimer=null; endGame(); }
-      },1000);
-    }
+    function tickCountdown(){ elTime.textContent=timeLeft; elState.textContent='プレイ中'; countdownTimer=setInterval(()=>{ timeLeft--; elTime.textContent=timeLeft; if(timeLeft<=0){ clearInterval(countdownTimer); countdownTimer=null; endGame(); } },1000); }
 
-    function endGame(){
-      running=false; elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false;
-      clearTimeout(spawnTimer); spawnTimer=null; for(const h of holes) hide(h);
-      const m=summary(); speak(m); log(m); finishJingle(); render();
-      // リザルト表示
-      rScore.textContent=score; rAcc.textContent=calcAcc()+"%"; rHit.textContent=hit; rMiss.textContent=miss; rMaxC.textContent=maxCombo; rDiff.textContent=elDifficulty.value;
-      modal.classList.add('show');
-    }
+    function endGame(){ running=false; elStart.disabled=false; elStop.disabled=true; elDifficulty.disabled=false; clearTimeout(spawnTimer); spawnTimer=null; holes.forEach(h=>hide(h)); const m=summary(); speak(m); log(m); finishJingle(); render();
+      // ポップアップに反映
+      rScore.textContent=score; rAcc.textContent=calcAcc()+"%"; rHit.textContent=hit; rMiss.textContent=miss; rMaxC.textContent=maxCombo; rDiff.textContent=elDifficulty.value; modal.classList.add('show'); }
 
     function summary(){ return `ゲーム終了！ スコア ${score}（命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}% / 最大コンボ ${maxCombo}）`; }
 
-    function spawnLoop(){
-      if(!running) return;
-      const {spawn,show}=currentPreset();
-      const delay = randInt(spawn[0], spawn[1]);
-      spawnTimer=setTimeout(()=>{
-        const idx = pickIndex();
-        const kind = pickEntityKind();
-        showEntity(idx, show, kind);
-        spawnLoop();
-      }, delay);
-      updateHud();
-    }
+    function spawnLoop(){ if(!running) return; const {spawn,show}=currentPreset(); const delay=randInt(spawn[0],spawn[1]); spawnTimer=setTimeout(()=>{ const idx=pickIndex(); const kind=pickEntityKind(); showEntity(idx,show,kind); spawnLoop(); },delay); updateHud(); }
 
-    function showEntity(index, duration, kind){
-      const h = holes[index]; if(!h || h.up) return;
-      h.up = true; h.kind = kind;
-      const el = h.entity;
-      el.classList.remove('mole','bunny','fox','hit');
-      el.classList.add(kind);
-      el.querySelectorAll('.ear').forEach(e=>e.remove());
-      if(kind==='bunny'){
-        const left=document.createElement('span'); left.className='ear left';
-        const right=document.createElement('span'); right.className='ear right';
-        el.append(left,right);
-      }
-      el.hidden=false; el.classList.remove('down'); el.classList.add('up');
-      const t=setTimeout(()=>hide(h), duration);
-      hideTimers.set(index,t);
-    }
+    function showEntity(index,duration,kind){ const h=holes[index]; if(!h||h.up) return; h.up=true; h.kind=kind; const el=h.entity; el.classList.remove('mole','bunny','fox','hit','angry'); el.classList.add(kind); el.querySelectorAll('.ear').forEach(e=>e.remove()); if(kind==='bunny'){ const L=document.createElement('span'); L.className='ear left'; const R=document.createElement('span'); R.className='ear right'; el.append(L,R);} el.hidden=false; el.classList.remove('down'); el.classList.add('up'); const t=setTimeout(()=>hide(h),duration); hideTimers.set(index,t); }
 
-    function hide(h){
-      if(!h.up) return; h.up=false;
-      h.entity.classList.remove('up'); h.entity.classList.add('down');
-      setTimeout(()=>{ h.entity.hidden=true; h.entity.classList.remove('hit'); }, 180);
-    }
+    function hide(h){ if(!h.up) return; h.up=false; h.entity.classList.remove('up'); h.entity.classList.add('down'); setTimeout(()=>{ h.entity.hidden=true; h.entity.classList.remove('hit','angry'); },180); }
 
-    function onHoleClick(index){
-      if(!running){ miss++; resetCombo(); render(); return; }
-      const h = holes[index];
-      if(h.up){
-        if(h.kind==='mole'){
-          combo++; maxCombo = Math.max(maxCombo, combo);
-          const bonus = Math.min(COMBO_BONUS_CAP, Math.max(0, (combo-1)*COMBO_BONUS_STEP));
-          score += 10 + bonus; hit++; cancelHide(index);
-          h.entity.classList.add('hit');
-          beep(720 + Math.min(280, combo*10), 0.05);
-          log(`✅ もぐら命中！（+10${bonus?` +${bonus}`:''}） combo x${combo}`);
-          setTimeout(()=>hide(h), 160);
-        } else {
-          // デコイ
-          score = Math.max(0, score-5); miss++; cancelHide(index);
-          beep(180,0.06); log('⚠️ デコイにヒット！（-5）');
-          resetCombo();
-          setTimeout(()=>hide(h), 120);
-        }
-      } else {
-        miss++; beep(220,0.04); log('❌ ミス'); resetCombo();
-      }
-      render();
-    }
+    function onHoleClick(index){ if(!running){ miss++; resetCombo(); render(); return; } const h=holes[index]; if(h.up){ if(h.kind==='mole'){ combo++; maxCombo=Math.max(maxCombo,combo); const bonus=Math.min(COMBO_BONUS_CAP, Math.max(0,(combo-1)*COMBO_BONUS_STEP)); score += 10 + bonus; hit++; cancelHide(index); h.entity.classList.add('hit'); beep(720+Math.min(280,combo*10),0.05); log(`✅ もぐら命中！（+10${bonus?` +${bonus}`:''}） combo x${combo}`); setTimeout(()=>hide(h),160);
+        } else { // デコイ：点数制
+          const p = h.kind==='bunny'? PENALTY.bunny : PENALTY.fox; score -= p; miss++; cancelHide(index); h.entity.classList.add('angry'); beep(160,0.06); setTimeout(()=>hide(h),140); log(`⚠️ ${h.kind==='bunny'?'ウサギ':'キツネ'}にヒット！（-${p}）`); resetCombo(); }
+      } else { miss++; beep(220,0.04); log('❌ ミス'); resetCombo(); } render(); }
 
     function resetCombo(){ combo=0; }
     function cancelHide(index){ const t=hideTimers.get(index); if(t){ clearTimeout(t); hideTimers.delete(index); } }
 
     function currentPreset(){ return PRESETS[elDifficulty.value] || PRESETS.normal; }
-    function pickIndex(){ let idx = randInt(0, holes.length-1); if(holes.length>1 && idx===lastIndex){ idx = (idx + 1 + randInt(0, holes.length-2)) % holes.length; } lastIndex = idx; return idx; }
-    function pickEntityKind(){ const r=Math.random(); if(r < ENTITY_WEIGHTS.mole) return 'mole'; if(r < ENTITY_WEIGHTS.mole + ENTITY_WEIGHTS.bunny) return 'bunny'; return 'fox'; }
+    function pickIndex(){ let idx=randInt(0,holes.length-1); if(holes.length>1 && idx===lastIndex){ idx=(idx+1+randInt(0,holes.length-2))%holes.length; } lastIndex=idx; return idx; }
+    function pickEntityKind(){ const r=Math.random(); if(r<ENTITY_WEIGHTS.mole) return 'mole'; if(r<ENTITY_WEIGHTS.mole+ENTITY_WEIGHTS.bunny) return 'bunny'; return 'fox'; }
 
     function render(){ elScore.textContent=score; elHit.textContent=hit; elMiss.textContent=miss; elAcc.textContent=calcAcc()+"%"; elCombo.textContent=combo; elMaxCombo.textContent=maxCombo; }
     function calcAcc(){ const t=hit+miss; return t? Math.round(hit/t*100):0; }
-    function updateHud(){ const {spawn,show}=currentPreset(); elRate.textContent=`${spawn[0]}-${spawn[1]}ms`; elShow.textContent=`${show}ms`; elState.textContent=running? 'プレイ中':'停止中'; }
+    function updateHud(){ const {spawn,show}=currentPreset(); elRate.textContent=`${spawn[0]}-${spawn[1]}ms`; elShow.textContent=`${show}ms`; elState.textContent=running?'プレイ中':'停止中'; }
     function clearAllTimers(){ if(spawnTimer){ clearTimeout(spawnTimer); spawnTimer=null; } if(countdownTimer){ clearInterval(countdownTimer); countdownTimer=null; } hideTimers.forEach(t=>clearTimeout(t)); hideTimers.clear(); }
 
     function share(){ const text=`もぐら叩き：スコア ${score} / 命中 ${hit} / ミス ${miss} / 精度 ${calcAcc()}% / 最大コンボ ${maxCombo}`; try{ if(navigator.share){ navigator.share({ title:document.title, text, url:location.href }); } else if(navigator.clipboard){ navigator.clipboard.writeText(`${text}
